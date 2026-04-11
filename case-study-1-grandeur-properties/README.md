@@ -164,5 +164,7 @@ For a repeatable execution guide, see [Validation Playbook](./docs/validation-pl
 ![Teams](screenshots/teams-notification.png)
 
 ---
+Sensitive identifiers (workspace, connections, teams) are masked for security.
 
+## Conclusion
 This case study highlights how Microsoft Fabric can be used to build a practical, enterprise-style ingestion pipeline for global property listing data with strong attention to auditability, privacy, and operational reliability.
