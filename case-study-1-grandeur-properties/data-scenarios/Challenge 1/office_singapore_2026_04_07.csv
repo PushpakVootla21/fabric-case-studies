@@ -1,0 +1,4 @@
+property_id,property_name,listing_price,currency,enquiries_received,viewings_scheduled,viewings_completed,offer_received,last_refreshed,office_code,agent_id,agent_personal_email,internal_crm_ref
+SG-SNT-12001,Sentosa Cove Grand Villa,12000000,SGD,2,2,1,N,2026-04-07,SGP,AGT-612,timothysmith@hotmail.com,CRM-SGP-76237
+SG-ORC-08501,Orchard Boulevard Penthouse,8500000,SGD,3,2,2,Y,2026-04-07,SGP,AGT-774,jaysingleton@gmail.com,CRM-SGP-88907
+SG-MRB-19501,Marina Bay Sky Residence,19500000,SGD,1,1,0,N,2026-04-07,SGP,AGT-903,manningtara@hotmail.com,CRM-SGP-13478

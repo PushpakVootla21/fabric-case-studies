@@ -1,0 +1,4 @@
+property_id,property_name,listing_price,currency,enquiries_received,viewings_scheduled,viewings_completed,offer_received,last_refreshed,office_code,agent_id,agent_personal_email,internal_crm_ref
+AE-PLM-18901,Palm Jumeirah Sky Villa,19500000,AED,10,6,6,Y,2026-04-09,DXB,AGT-817,alexparker@gmail.com,CRM-DXB-65302
+AE-DFC-09751,DIFC Penthouse Collection,9750000,AED,5,3,3,N,2026-04-09,DXB,AGT-332,kathleencarr@gmail.com,CRM-DXB-14165
+AE-MRN-22001,Marina Crown Residences,22000000,AED,7,5,4,Y,2026-04-09,DXB,AGT-501,apratt@yahoo.com,CRM-DXB-13905

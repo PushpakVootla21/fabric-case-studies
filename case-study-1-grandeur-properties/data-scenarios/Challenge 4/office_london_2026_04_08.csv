@@ -1,0 +1,4 @@
+property_id,property_name,listing_price,currency,enquiries_received,viewings_scheduled,viewings_completed,offer_received,last_refreshed,office_code,agent_id,agent_personal_email,internal_crm_ref
+GB-MFR-28501,One Hyde Park - Penthouse A,28500000,GBP,5,3,2,N,2026-04-08,LON,AGT-441,bobby28@yahoo.com,CRM-LON-81482
+GB-KNS-12751,The Glasshouse Kensington,12750000,GBP,3,2,1,N,2026-04-08,LON,AGT-229,lisa00@yahoo.com,CRM-LON-21395
+GB-BLG-19001,Belgravia Townhouse,19000000,GBP,7,4,4,Y,2026-04-08,LON,AGT-318,nturner@gmail.com,CRM-LON-87397

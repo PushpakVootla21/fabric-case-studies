@@ -41,6 +41,47 @@ At a high level, the architecture separates ingestion, curation, and operational
 - File pattern-based ingestion using `office_*.csv`
 - Operational metadata enrichment with pipeline ingestion timestamp
 
+## How to Replicate in Microsoft Fabric
+
+Use the exported pipeline JSON in `pipeline-json/pl_casestudy_1.json` as a reference implementation, then replace the environment-specific placeholders before publishing or re-creating the pipeline in your own Fabric workspace.
+
+### Prerequisites
+
+- A Microsoft Fabric workspace with Data Factory and Lakehouse access
+- A Lakehouse with a `grandeur.dailyupdate` target table
+- Lakehouse file folders for landing, archive, and quarantine handling
+- A Microsoft Teams connection if you want the notification step enabled
+
+### Replace These Placeholders
+
+- `<workspace-id>`: the target Microsoft Fabric workspace ID
+- `<lakehouse-id>`: the Lakehouse artifact ID used for both `Files` and `Tables`
+- `<object-id>`: the pipeline object ID in the exported JSON
+- `<user-id>`: the user or service principal that last modified the pipeline
+- `<team-id>`: the Microsoft Teams team ID for notifications
+- `<channel-id>`: the Microsoft Teams channel ID for notifications
+- `<connection-id>`: the Microsoft Teams connection reference used by the activity
+
+### Fabric Setup Checklist
+
+1. Create or identify the Lakehouse that will host the solution.
+2. Create the target table `grandeur.dailyupdate` with the expected schema, including `property_id` and `insert_time`.
+3. Create the Lakehouse file folders used by the pipeline.
+4. Recommended production layout:
+   - `Casestudy1/Landing/Incoming`
+   - `Casestudy1/Archive/Processed`
+   - `Casestudy1/Quarantine/Unexpected`
+5. In the Copy activity, add `insert_time` as an additional column using `@utcNow()`.
+6. Import mappings from a representative `office_*.csv` file, then keep those mappings while switching the file name to dynamic content.
+7. Configure the Microsoft Teams activity with dynamic content for pipeline name, pipeline ID, run ID, execution time, and status.
+
+### Operational Notes
+
+- Only files matching `office_*.csv` should be ingested into the Lakehouse table.
+- Unexpected or non-conforming files should be routed to quarantine rather than the trusted archive path.
+- Landing-zone deletion should happen only after a successful archive or quarantine move.
+- If you do not want Teams alerts in your environment, disable or remove the notification activity after import.
+
 ## Pipeline Flow
 
 1. Monitor or trigger ingestion for incoming office CSV files in the landing zone.
@@ -76,6 +117,8 @@ The pipeline design was validated against the following scenarios:
 - Confirmed that processed files are archived successfully
 - Verified that landing-zone file deletion occurs only after archive success
 - Reviewed rerun behavior to reduce duplicate processing risk
+
+For a repeatable execution guide, see [Validation Playbook](./docs/validation-playbook.md) and [SQL Checks](./sql/validation_queries.sql).
 
 ## Design Challenges
 

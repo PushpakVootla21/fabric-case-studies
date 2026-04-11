@@ -1,0 +1,4 @@
+property_id,property_name,listing_price,currency,enquiries_received,viewings_scheduled,viewings_completed,offer_received,last_refreshed,office_code,agent_id,agent_personal_email,internal_crm_ref
+IN-PKA-35001,432 Park Avenue - Sky Residence,35000000,INR,2,1,1,N,03-04-2026,IN,AGT-103,whitejoshua@yahoo.com,CRM-NYC-28289
+FR-TRB-08251,Tribeca Loft Penthouse,8250000,EU,4,3,0,N,03-04-2026,FR,AGT-556,lperez@hotmail.com,CRM-NYC-23434
+DE-CPK-15501,Central Park West Duplex,15500000,EU,3,2,2,N,03-04-2026,DE,AGT-789,wolfjessica@gmail.com,CRM-NYC-98696

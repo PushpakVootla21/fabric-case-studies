@@ -15,7 +15,7 @@ The architecture emphasizes four core objectives:
 - Privacy-aware curation through exclusion of PII fields
 - Reliable operational handling of processed source files
 
-At a high level, the design consists of a landing zone for incoming files, a pipeline with three sequential activities, and a Lakehouse target table that stores the curated property listing data.
+At a high level, the design consists of a landing zone for incoming files, a pipeline with three core sequential data-handling activities followed by a Microsoft Teams notification step, and a Lakehouse target table that stores the curated property listing data.
 
 ## Source and Landing Layer
 
