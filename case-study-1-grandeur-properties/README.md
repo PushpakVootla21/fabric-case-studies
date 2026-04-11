@@ -102,6 +102,24 @@ The pipeline design was validated against the following scenarios:
 - Add parameterization for region, office, and environment-specific deployments
 - Integrate downstream Power BI reporting on curated Lakehouse data
 
+## Screenshots
+
+### Pipeline Design
+![Pipeline](screenshots/pipeline-design.png)
+
+### Successful Execution
+![Run](screenshots/pipeline-run-success.png)
+
+### Lakehouse Output
+![Table](screenshots/lakehouse-table.png)
+
+### Archive & Cleanup
+![Archive](screenshots/archive-folder.png)
+![Landing](screenshots/landing-after-delete.png)
+
+### Teams Notification
+![Teams](screenshots/teams-notification.png)
+
 ---
 
 This case study highlights how Microsoft Fabric can be used to build a practical, enterprise-style ingestion pipeline for global property listing data with strong attention to auditability, privacy, and operational reliability.

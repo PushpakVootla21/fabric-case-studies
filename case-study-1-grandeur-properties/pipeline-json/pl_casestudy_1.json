@@ -1,0 +1,192 @@
+{
+  "name": "PL_Casestudy1",
+  "objectId": "<object-id>",
+  "properties": {
+    "activities": [
+      {
+        "name": "Copy_to_LH",
+        "type": "Copy",
+        "dependsOn": [],
+        "typeProperties": {
+          "source": {
+            "type": "DelimitedTextSource",
+            "additionalColumns": [
+              {
+                "name": "insert_time",
+                "value": {
+                  "value": "@utcNow()",
+                  "type": "Expression"
+                }
+              }
+            ],
+            "storeSettings": {
+              "type": "AzureBlobStorageReadSettings",
+              "recursive": true,
+              "wildcardFolderPath": "Casestudy1/Landing",
+              "wildcardFileName": "office_*.csv"
+            },
+            "datasetSettings": {
+              "linkedService": {
+                "name": "Lakehouse_Service",
+                "properties": {
+                  "type": "Lakehouse",
+                  "typeProperties": {
+                    "workspaceId": "<workspace-id>",
+                    "artifactId": "<lakehouse-id>",
+                    "rootFolder": "Files"
+                  }
+                }
+              },
+              "type": "DelimitedText",
+              "typeProperties": {
+                "location": {
+                  "type": "LakehouseLocation"
+                },
+                "firstRowAsHeader": true
+              }
+            }
+          },
+          "sink": {
+            "type": "LakehouseTableSink",
+            "tableActionOption": "Upsert",
+            "upsertSettings": {
+              "keys": ["property_id"]
+            },
+            "datasetSettings": {
+              "linkedService": {
+                "name": "Lakehouse_Service",
+                "properties": {
+                  "type": "Lakehouse",
+                  "typeProperties": {
+                    "workspaceId": "<workspace-id>",
+                    "artifactId": "<lakehouse-id>",
+                    "rootFolder": "Tables"
+                  }
+                }
+              },
+              "type": "LakehouseTable",
+              "typeProperties": {
+                "schema": "granduer",
+                "table": "dailyupdate"
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "Copy_to_Archive",
+        "type": "Copy",
+        "dependsOn": [
+          {
+            "activity": "Copy_to_LH",
+            "dependencyConditions": ["Succeeded"]
+          }
+        ],
+        "typeProperties": {
+          "source": {
+            "type": "DelimitedTextSource",
+            "storeSettings": {
+              "type": "LakehouseReadSettings",
+              "recursive": true,
+              "wildcardFolderPath": "Casestudy1/Landing",
+              "wildcardFileName": "*.csv"
+            },
+            "datasetSettings": {
+              "linkedService": {
+                "name": "Lakehouse_Service",
+                "properties": {
+                  "type": "Lakehouse",
+                  "typeProperties": {
+                    "workspaceId": "<workspace-id>",
+                    "artifactId": "<lakehouse-id>",
+                    "rootFolder": "Files"
+                  }
+                }
+              }
+            }
+          },
+          "sink": {
+            "type": "DelimitedTextSink",
+            "datasetSettings": {
+              "linkedService": {
+                "name": "Lakehouse_Service",
+                "properties": {
+                  "type": "Lakehouse",
+                  "typeProperties": {
+                    "workspaceId": "<workspace-id>",
+                    "artifactId": "<lakehouse-id>",
+                    "rootFolder": "Files"
+                  }
+                }
+              },
+              "typeProperties": {
+                "location": {
+                  "type": "LakehouseLocation",
+                  "folderPath": "Casestudy1/Archive"
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "Delete_data_in_landing",
+        "type": "Delete",
+        "dependsOn": [
+          {
+            "activity": "Copy_to_Archive",
+            "dependencyConditions": ["Succeeded"]
+          }
+        ],
+        "typeProperties": {
+          "datasetSettings": {
+            "linkedService": {
+              "name": "Lakehouse_Service",
+              "properties": {
+                "type": "Lakehouse",
+                "typeProperties": {
+                  "workspaceId": "<workspace-id>",
+                  "artifactId": "<lakehouse-id>",
+                  "rootFolder": "Files"
+                }
+              }
+            },
+            "type": "Binary",
+            "typeProperties": {
+              "location": {
+                "type": "LakehouseLocation",
+                "folderPath": "Casestudy1/Landing"
+              }
+            }
+          },
+          "storeSettings": {
+            "type": "LakehouseReadSettings",
+            "recursive": true,
+            "wildcardFileName": "*.csv"
+          }
+        }
+      },
+      {
+        "name": "MicrosoftTeams_Notification",
+        "type": "MicrosoftTeams",
+        "dependsOn": [
+          {
+            "activity": "Delete_data_in_landing",
+            "dependencyConditions": ["Succeeded"]
+          }
+        ],
+        "typeProperties": {
+          "operationType": "SendMessageInChannel",
+          "subject": "CaseStudy_1_Pipeline_Alerts",
+          "content": "Pipeline executed successfully",
+          "teamId": "<team-id>",
+          "channelId": "<channel-id>"
+        },
+        "externalReferences": {
+          "connection": "<connection-id>"
+        }
+      }
+    ],
+    "lastModifiedByObjectId": "<user-id>"
+  }
+}
