@@ -10,12 +10,15 @@ Design a production-grade Microsoft Fabric pipeline to ingest global property li
 
 The pipeline performs:
 
-1. Ingest files from Landing zone using wildcard pattern
-2. Load data into Lakehouse using Upsert
-3. Add ingestion timestamp (`insert_time`)
-4. Archive processed files
-5. Delete files from Landing only after archive success
-6. Send notification on success
+1. Identify trusted office files using the `office_*.csv` naming rule
+2. Validate trusted file schema before load
+3. Load curated business columns into Lakehouse using Upsert
+4. Exclude sensitive columns from the trusted analytics table
+5. Add ingestion timestamp (`insert_time`)
+6. Archive valid processed files
+7. Route schema-drift, wrongly named CSV, and non-CSV files to quarantine
+8. Delete files from Landing only after archive or quarantine success
+9. Send notification on completion
 
 ---
 
@@ -32,6 +35,7 @@ The pipeline performs:
 
 * No duplicate records
 * Latest data overwrites previous state
+* Invalid or unsupported files do not enter the trusted Lakehouse table
 
 ---
 
@@ -39,14 +43,17 @@ The pipeline performs:
 
 * Each record contains `insert_time`
 * Enables tracking of ingestion
+* Quarantine handling preserves traceability for rejected or unsupported files
 
 ---
 
 ### File Lifecycle
 
-Landing → Archive → Delete
+Landing → Archive → Delete for valid files
+Landing → Quarantine → Delete for unsupported files
 
 * Archive ensures recoverability
+* Quarantine isolates unsupported or drifted inputs
 * Delete ensures clean ingestion zone
 
 ---
@@ -72,6 +79,12 @@ Landing → Archive → Delete
 * No duplicates
 * Row count stable
 
+### Additional Input Handling
+
+* Wrongly named CSV files should not enter the trusted Lakehouse path
+* Non-CSV files should be quarantined
+* Schema-drift office files should be quarantined
+
 ---
 
 ## Known Challenges
@@ -89,6 +102,9 @@ Refer to:
   * corrected files via upsert
   * partial failures safely
   * repeated runs without duplication
+  * unexpected file names safely
+  * non-CSV files outside the curated load path
+  * schema-drift files outside the curated load path
 
 ---
 
@@ -99,3 +115,12 @@ Refer to:
 * Clear audit trail
 * Easy troubleshooting
 * Scalable design
+
+---
+
+## Interview References
+
+For interview preparation and portfolio walkthroughs, also use:
+
+- `docs/interview-guide.md`
+- `docs/interview-quick-reference.md`

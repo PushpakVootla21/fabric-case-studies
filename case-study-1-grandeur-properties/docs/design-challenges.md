@@ -4,7 +4,7 @@
 
 **Grandeur Properties Global Listing Intelligence Pipeline**
 
-This document outlines five common Microsoft Fabric pipeline design challenges for the Grandeur Properties case study. Each challenge is answered in a practical, interview-ready format that explains the current pipeline behavior, the associated design implications, and the recommended improvement path.
+This document outlines the scoped Microsoft Fabric pipeline design challenges for the Grandeur Properties case study. Each challenge is written in a practical, interview-ready format that explains the current pipeline behavior, the design implications, and the recommended improvement path.
 
 ## 1. Singapore Expansion
 
@@ -66,24 +66,21 @@ One office adds a new column to its CSV extract or changes an existing column na
 
 ### What Happens in the Current Pipeline
 
-The current pipeline expects a known source structure. If schema drift occurs, the ingestion process may fail, map data incorrectly, or ignore unexpected fields depending on the Copy activity configuration and column mapping behavior.
-
-Because the case study design focuses on controlled ingestion, schema inconsistency would likely require investigation before the file could be trusted for loading.
+The current pipeline validates trusted office files before `Copy_to_LH`. If schema drift occurs, the file does not enter the curated load path and is routed to quarantine for review.
 
 ### Whether Pipeline Change Is Required
 
-Possibly yes. If the drift affects required business columns or breaks the expected mapping, the pipeline or source contract must be updated.
+No immediate pipeline change is required for the scoped case study, because schema validation and quarantine handling already protect the trusted load path.
 
 ### Risks
 
-- Pipeline failures that delay downstream reporting
-- Incorrect data mapping if columns shift unexpectedly
-- Hidden quality issues if new columns carry important business meaning but are silently ignored
-- Increased support overhead when offices manage extracts independently
+- Drifted files still require manual review before correction or replay
+- Downstream reporting can be incomplete if an office file is quarantined and not quickly remediated
+- Additional support effort is required when source teams change extracts independently
 
 ### Better Future Improvement
 
-Implement schema validation before the Copy activity loads data into the Lakehouse. This could include pre-ingestion checks, rejected-file handling, alerting, and a controlled schema evolution process. For larger-scale implementations, a metadata-driven ingestion framework would improve maintainability.
+Add stronger alerting, rejected-file logging, and a more formal schema evolution process so quarantined schema-drift files are surfaced and resolved faster.
 
 ## 4. Broken Chain / Archive Failure
 
@@ -142,14 +139,63 @@ Not necessarily, depending on business expectations. If partial loads are accept
 
 Add completeness checks based on expected office submissions for each run window. This could include control tables, delivery SLAs, alerting for missing files, and run-status indicators that clearly show whether the refresh is full or partial.
 
+## 6. Different File Name
+
+### Scenario
+
+An office drops a CSV file that contains valid-looking data but uses the wrong name, such as `singapore_office.csv` or `manual_fix.csv`.
+
+### What Happens in the Current Pipeline
+
+Because the ingestion rule is based on the wildcard `office_*.csv`, a differently named file is not picked up by the trusted load path, is not loaded into the Lakehouse table, and is routed to quarantine for review.
+
+### Whether Pipeline Change Is Required
+
+No change is required for the scoped case study, because the current design already keeps differently named CSV files out of the trusted load path and routes them to quarantine.
+
+### Risks
+
+- Source teams may think the file was processed when it was not
+- Missing data may go unnoticed if quarantine monitoring is weak
+- Manual review is still required to decide whether the file should be renamed, replayed, or rejected
+
+### Better Future Improvement
+
+Add stronger alerting and exception logging around the quarantine branch so misnamed files are surfaced immediately to operators.
+
+## 7. Non-CSV File Routing
+
+### Scenario
+
+A non-CSV file such as `notes.txt` or `readme.docx` is placed in the landing area.
+
+### What Happens in the Current Pipeline
+
+Because the ingestion rule only targets `office_*.csv`, non-CSV files are not loaded into the Lakehouse table and are instead routed to quarantine for controlled handling.
+
+### Whether Pipeline Change Is Required
+
+No change is required for the scoped case study, because the current implementation already keeps non-CSV files out of the trusted ingestion path and routes them to quarantine.
+
+### Risks
+
+- Landing folders may become cluttered with irrelevant files
+- Support teams may still need manual intervention to classify and clean up non-business inputs
+- Operators may not know the business intent of the file unless quarantine review is monitored closely
+
+### Better Future Improvement
+
+Add stronger exception categorization and alerting for quarantined non-CSV files so support teams can resolve them faster.
+
 ## Summary
 
-These five challenges show that the current pipeline design is strong for a practical case study and covers core enterprise patterns such as wildcard ingestion, Upsert processing, PII exclusion, and archive-before-delete controls. At the same time, they also highlight the next level of maturity required for production-scale data engineering:
+These scoped challenges show that the current pipeline design is strong for a practical case study and covers core enterprise patterns such as wildcard ingestion, Upsert processing, PII exclusion, schema validation, archive-before-delete controls, and trusted-file selection through naming rules. At the same time, they highlight the next level of maturity required for production-scale data engineering:
 
 - Better source onboarding governance
 - Historical tracking for late corrections
-- Stronger schema drift management
+- Stronger schema-drift monitoring and alerting
 - Improved failure recovery and replay controls
 - Completeness monitoring for expected file arrivals
+- Stronger monitoring and alerting for quarantined misnamed and unsupported files
 
 From an interview perspective, the key message is that the current design is intentionally simple but sound, while the future improvements show how the same architecture can evolve into a more robust enterprise-grade Microsoft Fabric pipeline.

@@ -14,6 +14,10 @@ This playbook defines a repeatable validation flow for proving that the Microsof
 - Confirm that landing files are deleted only after successful archive or quarantine handling
 - Confirm that Upsert updates existing property rows instead of creating duplicates
 - Confirm that `insert_time` is populated for loaded records
+- Confirm that file-routing behavior is consistent for valid office CSV, differently named CSV, and non-CSV inputs
+- Confirm that schema-drift office files are routed to quarantine
+- Confirm that sensitive fields are excluded from the trusted target table
+- Confirm that a missing office file results in a controlled partial load rather than a full stop
 
 ## Pre-Run Setup
 
@@ -23,6 +27,7 @@ Before running the validation, confirm the following:
 - The landing, archive, and quarantine folders exist
 - The pipeline uses explicit mappings for the curated columns
 - The pipeline adds `insert_time` using `@utcNow()`
+- Sensitive fields are excluded from the trusted Lakehouse mapping
 - The Teams activity is configured with dynamic content for run metadata
 
 ## Test Scenario 1: Valid Office File Ingestion
@@ -60,8 +65,8 @@ Before running the validation, confirm the following:
 ### Expected Result
 
 - The file is not ingested into the Lakehouse table
-- The file is routed according to the non-CSV handling branch, if implemented
-- If a non-CSV branch is not implemented, the file should remain untouched and this behavior should be documented
+- The file is routed to the quarantine path
+- The file is deleted from landing only after quarantine copy succeeds
 
 ## Test Scenario 4: Upsert Update Behavior
 
@@ -76,7 +81,31 @@ Before running the validation, confirm the following:
 - The latest values overwrite the prior values according to Upsert behavior
 - `insert_time` reflects the most recent successful ingestion of that record
 
-## Test Scenario 5: Archive-Before-Delete Control
+## Test Scenario 5: Schema Drift Handling
+
+### Input
+
+- Drop a validly named office file that contains schema drift, such as a renamed or missing required column
+
+### Expected Result
+
+- The file is not ingested into the trusted Lakehouse table
+- The file is routed to the quarantine path
+- The file is deleted from landing only after quarantine copy succeeds
+
+## Test Scenario 6: Different File Name Handling
+
+### Input
+
+- Drop a differently named CSV such as `singapore_office.csv` into the landing folder
+
+### Expected Result
+
+- The file is not ingested into the trusted Lakehouse table
+- The file is routed to the quarantine path
+- The behavior is visible in the demo and validation evidence
+
+## Test Scenario 7: Archive-Before-Delete Control
 
 ### Input
 
@@ -88,6 +117,20 @@ Before running the validation, confirm the following:
 - The pipeline shows a partial or failed operational state
 - The run can be investigated without losing the original source file
 
+## Test Scenario 8: Missing Office File / Partial Load
+
+### Input
+
+- Run the pipeline with one expected office file intentionally absent
+- Keep at least one other valid `office_*.csv` file in landing
+
+### Expected Result
+
+- Available valid office files are still processed
+- The missing office file does not cause unsupported files to enter the trusted path
+- The resulting run should be explained as a partial refresh during demo or handover
+- The Teams notification still shows the run metadata, but additional completeness alerting remains a future improvement
+
 ## SQL Validation Queries
 
 Use the SQL checks in `sql/validation_queries.sql` after pipeline execution to validate:
@@ -97,13 +140,14 @@ Use the SQL checks in `sql/validation_queries.sql` after pipeline execution to v
 - Null `insert_time` count
 - Duplicate `property_id` count
 - Known update checks for selected records
+- Trusted target excludes sensitive columns
 
 ## Demo Walkthrough Sequence
 
 For a portfolio or interview demo, use this sequence:
 
 1. Show the landing, archive, and quarantine folders before execution
-2. Show a valid file and an unexpected file in landing
+2. Show a valid file, a schema-drift file, a differently named CSV, and a non-CSV file in landing
 3. Trigger the pipeline
 4. Show the pipeline run status
 5. Show the Lakehouse table results
@@ -111,18 +155,37 @@ For a portfolio or interview demo, use this sequence:
 7. Show the archive and quarantine folders
 8. Show that landing has been cleared according to the implemented control flow
 9. Show the Microsoft Teams notification with pipeline name, pipeline ID, run ID, timestamp, and status
+10. Explain whether the run was full or partial when demonstrating a missing-office scenario
 
 ## Evidence to Capture
 
 Capture screenshots or logs for the following:
 
 - Pipeline design
-- Successful pipeline run
+- File discovery and filtering logic
+- Valid-file `ForEach` flow
+- Schema validation notebook step
 - Lakehouse table contents
 - Archive folder contents
 - Quarantine folder contents
 - Empty or controlled landing state after completion
 - Teams notification with resolved run metadata
+- Evidence that schema-drift, differently named CSV, and non-CSV inputs were quarantined correctly
+- Evidence of controlled partial-load behavior when an expected office file is missing
+
+Recommended screenshot set from this repo:
+
+- `screenshots/01-pipeline-canvas-overview.png`
+- `screenshots/02-getmetadata-and-filters.png`
+- `screenshots/03-foreach-valid-file-flow.png`
+- `screenshots/04-schema-validation-notebook-step.png`
+- `screenshots/05-copy-to-lakehouse-upsert.png`
+- `screenshots/06-archive-processed-files.png`
+- `screenshots/07-delete-from-landing.png`
+- `screenshots/08-teams-notification-step.png`
+- `screenshots/10-lakehouse-table-output.png`
+- `screenshots/11-archive-folder-output.png`
+- `screenshots/12-quarantine-folder-output.png`
 
 ## Conclusion
 

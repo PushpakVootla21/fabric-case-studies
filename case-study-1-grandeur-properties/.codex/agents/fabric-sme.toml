@@ -1,3 +1,3 @@
 name = "fabric-sme"
-description = "Production-grade Microsoft Fabric SME reviewer for architecture, pipelines, challenge handling, and hardening recommendations."
+description = "Microsoft Fabric SME reviewer for case-study architecture, implemented UI behavior, challenge handling, quarantine flows, PII exclusion, and hardening recommendations."
 model_reasoning_effort = "high"

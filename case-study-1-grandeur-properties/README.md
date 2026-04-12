@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This project is a Microsoft Fabric case study that demonstrates how to build a reliable property listing ingestion pipeline for a global real estate business. The solution automates the ingestion of office-generated CSV extracts using the wildcard pattern `office_*.csv`, loads curated data into a Lakehouse table, and applies incremental updates using an Upsert strategy keyed on `property_id`.
+This project is a Microsoft Fabric case study that demonstrates how to build a reliable property listing ingestion pipeline for a global real estate business. The solution automates the ingestion of office-generated CSV extracts using the wildcard pattern `office_*.csv`, validates trusted office files before load, routes exception files to quarantine, loads curated data into a Lakehouse table, and applies incremental updates using an Upsert strategy keyed on `property_id`.
 
 The pipeline is designed for production-style data operations, with a focus on data quality, repeatable ingestion, privacy-conscious processing, and controlled file lifecycle management. It also enriches each loaded record with a pipeline ingestion timestamp to improve auditability and downstream traceability.
 
@@ -22,13 +22,13 @@ The business needed a standardized Microsoft Fabric pipeline that could ingest f
 
 The solution follows a simple medallion-style ingestion pattern within Microsoft Fabric:
 
-1. Source files arrive in a landing area as office-specific CSV extracts matching `office_*.csv`.
-2. The pipeline reads the matching files and applies schema-aligned ingestion rules.
-3. Selected business columns are loaded into a Lakehouse table, while PII columns are excluded from the analytics layer.
-4. Records are merged into the target table using Upsert logic with `property_id` as the business key.
-5. A pipeline ingestion timestamp is added to each processed record for operational lineage.
-6. Successfully processed files are moved to an archive location.
-7. Files are deleted from the landing zone only after archive success is confirmed.
+1. Source files arrive in a landing area as office-specific CSV extracts.
+2. The pipeline identifies trusted files using the `office_*.csv` naming rule.
+3. Trusted office files are checked for schema compliance before load.
+4. Selected business columns are loaded into a Lakehouse table, while PII columns are excluded from the analytics layer.
+5. Records are merged into the target table using Upsert logic with `property_id` as the business key.
+6. Valid processed files are moved to an archive location, while unsupported inputs are routed to quarantine.
+7. Files are deleted from the landing zone only after archive or quarantine handling succeeds.
 
 At a high level, the architecture separates ingestion, curation, and operational file handling so that analytics users work from a clean and controlled Lakehouse dataset.
 
@@ -39,6 +39,8 @@ At a high level, the architecture separates ingestion, curation, and operational
 - CSV source files from distributed offices
 - Upsert/merge logic using `property_id` as the primary match key
 - File pattern-based ingestion using `office_*.csv`
+- Schema validation using a Fabric Notebook activity
+- Quarantine handling for schema-drift, wrong-name, and non-CSV files
 - Operational metadata enrichment with pipeline ingestion timestamp
 
 ## How to Replicate in Microsoft Fabric
@@ -57,51 +59,61 @@ Use the exported pipeline JSON in `pipeline-json/pl_casestudy_1.json` as a refer
 - `<workspace-id>`: the target Microsoft Fabric workspace ID
 - `<lakehouse-id>`: the Lakehouse artifact ID used for both `Files` and `Tables`
 - `<object-id>`: the pipeline object ID in the exported JSON
+- `<notebook-id>`: the schema-validation notebook artifact ID
 - `<user-id>`: the user or service principal that last modified the pipeline
 - `<team-id>`: the Microsoft Teams team ID for notifications
 - `<channel-id>`: the Microsoft Teams channel ID for notifications
 - `<connection-id>`: the Microsoft Teams connection reference used by the activity
+- `<logging-connection-id>`: the storage/logging connection used by delete activities
+- `<logging-path>`: the logging path used when delete logging is enabled
 
 ### Fabric Setup Checklist
 
 1. Create or identify the Lakehouse that will host the solution.
-2. Create the target table `grandeur.dailyupdate` with the expected schema, including `property_id` and `insert_time`.
+2. Create the target table `grandeur.dailyupdate` with the expected curated schema, including `property_id` and `insert_time`, and excluding sensitive fields such as `agent_personal_email` and `internal_crm_ref`.
 3. Create the Lakehouse file folders used by the pipeline.
 4. Recommended production layout:
    - `Casestudy1/Landing/Incoming`
    - `Casestudy1/Archive/Processed`
    - `Casestudy1/Quarantine/Unexpected`
 5. In the Copy activity, add `insert_time` as an additional column using `@utcNow()`.
-6. Import mappings from a representative `office_*.csv` file, then keep those mappings while switching the file name to dynamic content.
-7. Configure the Microsoft Teams activity with dynamic content for pipeline name, pipeline ID, run ID, execution time, and status.
+6. Import mappings from a representative `office_*.csv` file, then keep only approved business columns in the trusted target mapping.
+7. Add schema validation for trusted office files before `Copy_to_LH`.
+8. Configure quarantine branches for schema-drift, wrongly named CSV, and non-CSV inputs.
+9. Configure the Microsoft Teams activity with dynamic content for pipeline name, pipeline ID, run ID, execution time, and status.
 
 ### Operational Notes
 
 - Only files matching `office_*.csv` should be ingested into the Lakehouse table.
-- Unexpected or non-conforming files should be routed to quarantine rather than the trusted archive path.
+- Unexpected or non-conforming files are routed to quarantine rather than the trusted archive path.
+- Schema-drift files are quarantined instead of being loaded into the trusted table.
+- Sensitive fields are excluded from the trusted analytics table through explicit column mapping.
 - Landing-zone deletion should happen only after a successful archive or quarantine move.
+- If one office file is missing, the pipeline still processes the available valid files.
 - If you do not want Teams alerts in your environment, disable or remove the notification activity after import.
 
 ## Pipeline Flow
 
 1. Monitor or trigger ingestion for incoming office CSV files in the landing zone.
-2. Read all matching files using the wildcard pattern `office_*.csv`.
-3. Validate expected structure and select only approved columns for ingestion.
-4. Exclude PII-related attributes from the target analytics dataset.
-5. Add a pipeline ingestion timestamp to every incoming record.
-6. Load data into the Microsoft Fabric Lakehouse target table.
-7. Perform Upsert logic using `property_id` to insert new records and update existing ones.
-8. Move processed files to the archive location.
-9. Delete files from the landing zone only after archive completion succeeds.
+2. Read all files and identify trusted office files using the wildcard pattern `office_*.csv`.
+3. Validate the schema of trusted office files before load.
+4. Route schema-drift, wrongly named CSV, and non-CSV files to quarantine.
+5. Exclude PII-related attributes from the trusted analytics dataset.
+6. Add a pipeline ingestion timestamp to every incoming trusted record.
+7. Load valid data into the Microsoft Fabric Lakehouse target table.
+8. Perform Upsert logic using `property_id` to insert new records and update existing ones.
+9. Move processed trusted files to the archive location and delete landing files only after archive or quarantine completion succeeds.
 
 ## Key Features
 
 - Automated multi-file ingestion with wildcard-based file selection
 - Incremental load design using Upsert instead of full reloads
 - Business-key matching with `property_id`
+- Schema validation before trusted load
 - Built-in ingestion timestamp for auditability and operational tracking
 - Privacy-aware design through exclusion of PII columns
 - File archival to support traceability and reprocessing controls
+- Quarantine handling for schema drift and unsupported file inputs
 - Safe landing-zone cleanup dependent on archive success
 - Portfolio-ready pattern that mirrors real enterprise data engineering requirements
 
@@ -114,11 +126,14 @@ The pipeline design was validated against the following scenarios:
 - Verified that existing property records are updated correctly through Upsert using `property_id`
 - Confirmed that ingestion timestamp values are populated for all loaded records
 - Checked that PII columns are excluded from the target table
+- Validated schema-drift handling through the quarantine path
 - Confirmed that processed files are archived successfully
 - Verified that landing-zone file deletion occurs only after archive success
 - Reviewed rerun behavior to reduce duplicate processing risk
+- Validated quarantine routing for unexpected CSV and non-CSV file scenarios
+- Confirmed that missing office files do not block the ingestion of available valid files
 
-For a repeatable execution guide, see [Validation Playbook](./docs/validation-playbook.md) and [SQL Checks](./sql/validation_queries.sql).
+For a repeatable execution guide, see [Validation Playbook](./docs/validation-strategy.md) and [SQL Checks](./sql/validation_queries.sql).
 
 ## Design Challenges
 
@@ -134,12 +149,15 @@ For a repeatable execution guide, see [Validation Playbook](./docs/validation-pl
 - Adding operational metadata such as ingestion timestamp significantly improves traceability
 - Privacy controls should be embedded directly in pipeline design, not treated as a downstream cleanup step
 - Archive-first deletion logic is a practical safeguard for file-based ingestion patterns
+- File naming discipline matters because the wildcard rule only ingests `office_*.csv`, while unsupported inputs are isolated through quarantine handling
 - Microsoft Fabric provides a strong foundation for combining orchestration and Lakehouse-based analytics in a single solution
 
 ## Future Improvements
 
-- Add schema drift handling and stronger data quality checks
+- Add stronger schema-drift alerting and exception reporting
 - Introduce pipeline alerts and operational monitoring for failures
+- Add expected-office completeness monitoring so partial loads are surfaced explicitly
+- Add lightweight per-file quarantine logging for faster operator review
 - Capture row-level rejection logs for invalid records
 - Expand the design to support partitioning and higher-volume ingestion
 - Add parameterization for region, office, and environment-specific deployments
@@ -147,21 +165,32 @@ For a repeatable execution guide, see [Validation Playbook](./docs/validation-pl
 
 ## Screenshots
 
-### Pipeline Design
-![Pipeline](screenshots/pipeline-design.png)
+### Pipeline Canvas Overview
+![Pipeline Canvas](screenshots/01-pipeline-canvas-overview.png)
 
-### Successful Execution
-![Run](screenshots/pipeline-run-success.png)
+### Discovery and File Filtering
+![GetMetadata and Filters](screenshots/02-getmetadata-and-filters.png)
 
-### Lakehouse Output
-![Table](screenshots/lakehouse-table.png)
+### Valid File Processing Flow
+![ForEach Valid File](screenshots/03-foreach-valid-file-flow.png)
 
-### Archive & Cleanup
-![Archive](screenshots/archive-folder.png)
-![Landing](screenshots/landing-after-delete.png)
+### Schema Validation
+![Schema Validation Notebook](screenshots/04-schema-validation-notebook-step.png)
+
+### Lakehouse Upsert
+![Copy to Lakehouse](screenshots/05-copy-to-lakehouse-upsert.png)
+
+### Archive and Landing Cleanup
+![Archive Processed Files](screenshots/06-archive-processed-files.png)
+![Delete From Landing](screenshots/07-delete-from-landing.png)
 
 ### Teams Notification
-![Teams](screenshots/teams-notification.png)
+![Teams Notification](screenshots/08-teams-notification-step.png)
+
+### Lakehouse and File Outputs
+![Lakehouse Table Output](screenshots/10-lakehouse-table-output.png)
+![Archive Folder Output](screenshots/11-archive-folder-output.png)
+![Quarantine Folder Output](screenshots/12-quarantine-folder-output.png)
 
 ---
 Sensitive identifiers (workspace, connections, teams) are masked for security.

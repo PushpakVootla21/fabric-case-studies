@@ -6,12 +6,24 @@
       {
         "name": "Get_Landing_Files",
         "type": "GetMetadata",
+        "dependsOn": [],
+        "policy": {
+          "timeout": "0.12:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureOutput": false,
+          "secureInput": false
+        },
         "typeProperties": {
-          "fieldList": ["childItems"],
+          "fieldList": [
+            "childItems"
+          ],
           "datasetSettings": {
+            "annotations": [],
             "linkedService": {
               "name": "Lakehouse_Service",
               "properties": {
+                "annotations": [],
                 "type": "Lakehouse",
                 "typeProperties": {
                   "workspaceId": "<workspace-id>",
@@ -26,34 +38,100 @@
                 "type": "LakehouseLocation",
                 "folderPath": "Casestudy1/Landing/Incoming"
               },
-              "firstRowAsHeader": true
-            }
+              "columnDelimiter": ",",
+              "escapeChar": "\\",
+              "firstRowAsHeader": true,
+              "quoteChar": "\""
+            },
+            "schema": []
           },
           "storeSettings": {
-            "type": "LakehouseReadSettings",
-            "recursive": true
+            "type": "AzureBlobStorageReadSettings",
+            "recursive": true,
+            "enablePartitionDiscovery": false
+          },
+          "formatSettings": {
+            "type": "DelimitedTextReadSettings"
           }
         }
       },
-
       {
         "name": "Filter_Valid_Office_Csv",
         "type": "Filter",
+        "dependsOn": [
+          {
+            "activity": "Get_Landing_Files",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
         "typeProperties": {
           "items": {
             "value": "@activity('Get_Landing_Files').output.childItems",
             "type": "Expression"
           },
           "condition": {
-            "value": "@and(equals(item().type,'File'),startsWith(item().name,'office_'),endsWith(item().name,'.csv'))",
+            "value": "@and(\n  equals(item().type, 'File'),\n  and(\n    startsWith(item().name, 'office_'),\n    endsWith(item().name, '.csv')\n  )\n)",
             "type": "Expression"
           }
         }
       },
-
+      {
+        "name": "Filter_Unexpected_Csv",
+        "type": "Filter",
+        "dependsOn": [
+          {
+            "activity": "Get_Landing_Files",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "typeProperties": {
+          "items": {
+            "value": "@activity('Get_Landing_Files').output.childItems",
+            "type": "Expression"
+          },
+          "condition": {
+            "value": "@and(\n  equals(item().type, 'File'),\n  and(\n    endsWith(item().name, '.csv'),\n    not(startsWith(item().name, 'office_'))\n  )\n)",
+            "type": "Expression"
+          }
+        }
+      },
+      {
+        "name": "Filter_NonCsv",
+        "type": "Filter",
+        "dependsOn": [
+          {
+            "activity": "Get_Landing_Files",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "typeProperties": {
+          "items": {
+            "value": "@activity('Get_Landing_Files').output.childItems",
+            "type": "Expression"
+          },
+          "condition": {
+            "value": "@and(\n    equals(item().type,'File'),\n    not(endsWith(item().name,'.csv'))\n)",
+            "type": "Expression"
+          }
+        }
+      },
       {
         "name": "ForEach_Valid_File",
         "type": "ForEach",
+        "dependsOn": [
+          {
+            "activity": "Filter_Valid_Office_Csv",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
         "typeProperties": {
           "items": {
             "value": "@activity('Filter_Valid_Office_Csv').output.value",
@@ -62,8 +140,48 @@
           "isSequential": true,
           "activities": [
             {
+              "name": "Validate_File_Schema",
+              "type": "TridentNotebook",
+              "dependsOn": [],
+              "policy": {
+                "timeout": "0.12:00:00",
+                "retry": 2,
+                "retryIntervalInSeconds": 30,
+                "secureOutput": false,
+                "secureInput": false
+              },
+              "typeProperties": {
+                "notebookId": "<notebook-id>",
+                "workspaceId": "<workspace-id>",
+                "parameters": {
+                  "p_file_name": {
+                    "value": {
+                      "value": "@item().name",
+                      "type": "Expression"
+                    },
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            {
               "name": "Copy_to_LH",
               "type": "Copy",
+              "dependsOn": [
+                {
+                  "activity": "Validate_File_Schema",
+                  "dependencyConditions": [
+                    "Succeeded"
+                  ]
+                }
+              ],
+              "policy": {
+                "timeout": "0.12:00:00",
+                "retry": 0,
+                "retryIntervalInSeconds": 30,
+                "secureOutput": false,
+                "secureInput": false
+              },
               "typeProperties": {
                 "source": {
                   "type": "DelimitedTextSource",
@@ -77,62 +195,1036 @@
                     }
                   ],
                   "storeSettings": {
+                    "type": "AzureBlobStorageReadSettings",
+                    "recursive": true,
+                    "wildcardFolderPath": "Casestudy1/Landing/Incoming",
                     "wildcardFileName": {
                       "value": "@item().name",
                       "type": "Expression"
-                    }
+                    },
+                    "enablePartitionDiscovery": false
+                  },
+                  "formatSettings": {
+                    "type": "DelimitedTextReadSettings"
+                  },
+                  "datasetSettings": {
+                    "annotations": [],
+                    "linkedService": {
+                      "name": "Lakehouse_Service",
+                      "properties": {
+                        "annotations": [],
+                        "type": "Lakehouse",
+                        "typeProperties": {
+                          "workspaceId": "<workspace-id>",
+                          "artifactId": "<lakehouse-id>",
+                          "rootFolder": "Files"
+                        }
+                      }
+                    },
+                    "type": "DelimitedText",
+                    "typeProperties": {
+                      "location": {
+                        "type": "LakehouseLocation"
+                      },
+                      "columnDelimiter": ",",
+                      "escapeChar": "\\",
+                      "firstRowAsHeader": true,
+                      "quoteChar": "\""
+                    },
+                    "schema": []
                   }
                 },
                 "sink": {
                   "type": "LakehouseTableSink",
                   "tableActionOption": "Upsert",
                   "upsertSettings": {
-                    "keys": ["property_id"]
+                    "keys": [
+                      "property_id"
+                    ]
+                  },
+                  "applyVOrder": false,
+                  "datasetSettings": {
+                    "annotations": [],
+                    "linkedService": {
+                      "name": "Lakehouse_Service",
+                      "properties": {
+                        "annotations": [],
+                        "type": "Lakehouse",
+                        "typeProperties": {
+                          "workspaceId": "<workspace-id>",
+                          "artifactId": "<lakehouse-id>",
+                          "rootFolder": "Tables"
+                        }
+                      }
+                    },
+                    "type": "LakehouseTable",
+                    "schema": [],
+                    "typeProperties": {
+                      "schema": "grandeur",
+                      "table": "dailyupdate"
+                    }
+                  }
+                },
+                "enableStaging": false,
+                "translator": {
+                  "type": "TabularTranslator",
+                  "mappings": [
+                    {
+                      "source": {
+                        "name": "property_id",
+                        "type": "String",
+                        "physicalType": "String"
+                      },
+                      "sink": {
+                        "name": "property_id",
+                        "physicalType": "string"
+                      }
+                    },
+                    {
+                      "source": {
+                        "name": "property_name",
+                        "type": "String",
+                        "physicalType": "String"
+                      },
+                      "sink": {
+                        "name": "property_name",
+                        "physicalType": "string"
+                      }
+                    },
+                    {
+                      "source": {
+                        "name": "listing_price",
+                        "type": "String",
+                        "physicalType": "String"
+                      },
+                      "sink": {
+                        "name": "listing_price",
+                        "physicalType": "string"
+                      }
+                    },
+                    {
+                      "source": {
+                        "name": "currency",
+                        "type": "String",
+                        "physicalType": "String"
+                      },
+                      "sink": {
+                        "name": "currency",
+                        "physicalType": "string"
+                      }
+                    },
+                    {
+                      "source": {
+                        "name": "enquiries_received",
+                        "type": "String",
+                        "physicalType": "String"
+                      },
+                      "sink": {
+                        "name": "enquiries_received",
+                        "physicalType": "string"
+                      }
+                    },
+                    {
+                      "source": {
+                        "name": "viewings_scheduled",
+                        "type": "String",
+                        "physicalType": "String"
+                      },
+                      "sink": {
+                        "name": "viewings_scheduled",
+                        "physicalType": "string"
+                      }
+                    },
+                    {
+                      "source": {
+                        "name": "viewings_completed",
+                        "type": "String",
+                        "physicalType": "String"
+                      },
+                      "sink": {
+                        "name": "viewings_completed",
+                        "physicalType": "string"
+                      }
+                    },
+                    {
+                      "source": {
+                        "name": "offer_received",
+                        "type": "String",
+                        "physicalType": "String"
+                      },
+                      "sink": {
+                        "name": "offer_received",
+                        "physicalType": "string"
+                      }
+                    },
+                    {
+                      "source": {
+                        "name": "last_refreshed",
+                        "type": "String",
+                        "physicalType": "String"
+                      },
+                      "sink": {
+                        "name": "last_refreshed",
+                        "physicalType": "string"
+                      }
+                    },
+                    {
+                      "source": {
+                        "name": "office_code",
+                        "type": "String",
+                        "physicalType": "String"
+                      },
+                      "sink": {
+                        "name": "office_code",
+                        "physicalType": "string"
+                      }
+                    },
+                    {
+                      "source": {
+                        "name": "agent_id",
+                        "type": "String",
+                        "physicalType": "String"
+                      },
+                      "sink": {
+                        "name": "agent_id",
+                        "physicalType": "string"
+                      }
+                    },
+                    {
+                      "source": {
+                        "name": "insert_time",
+                        "type": "String"
+                      },
+                      "sink": {
+                        "name": "insert_time",
+                        "physicalType": "string"
+                      }
+                    }
+                  ],
+                  "typeConversion": true,
+                  "typeConversionSettings": {
+                    "allowDataTruncation": true,
+                    "treatBooleanAsNumber": false
                   }
                 }
               }
             },
-
             {
               "name": "Copy_to_Archive_Processed",
               "type": "Copy",
               "dependsOn": [
                 {
                   "activity": "Copy_to_LH",
-                  "dependencyConditions": ["Succeeded"]
+                  "dependencyConditions": [
+                    "Succeeded"
+                  ]
                 }
               ],
+              "policy": {
+                "timeout": "0.12:00:00",
+                "retry": 3,
+                "retryIntervalInSeconds": 30,
+                "secureOutput": false,
+                "secureInput": false
+              },
               "typeProperties": {
+                "source": {
+                  "type": "DelimitedTextSource",
+                  "storeSettings": {
+                    "type": "AzureBlobStorageReadSettings",
+                    "recursive": true,
+                    "wildcardFolderPath": "Casestudy1/Landing/Incoming",
+                    "wildcardFileName": {
+                      "value": "@{item().name}",
+                      "type": "Expression"
+                    },
+                    "enablePartitionDiscovery": false
+                  },
+                  "formatSettings": {
+                    "type": "DelimitedTextReadSettings"
+                  },
+                  "datasetSettings": {
+                    "annotations": [],
+                    "linkedService": {
+                      "name": "Lakehouse_Service",
+                      "properties": {
+                        "annotations": [],
+                        "type": "Lakehouse",
+                        "typeProperties": {
+                          "workspaceId": "<workspace-id>",
+                          "artifactId": "<lakehouse-id>",
+                          "rootFolder": "Files"
+                        }
+                      }
+                    },
+                    "type": "DelimitedText",
+                    "typeProperties": {
+                      "location": {
+                        "type": "LakehouseLocation"
+                      },
+                      "columnDelimiter": ",",
+                      "escapeChar": "\\",
+                      "firstRowAsHeader": true,
+                      "quoteChar": "\""
+                    },
+                    "schema": []
+                  }
+                },
                 "sink": {
-                  "type": "DelimitedTextSink"
+                  "type": "DelimitedTextSink",
+                  "storeSettings": {
+                    "type": "AzureBlobStorageWriteSettings"
+                  },
+                  "formatSettings": {
+                    "type": "DelimitedTextWriteSettings",
+                    "fileExtension": ".txt"
+                  },
+                  "datasetSettings": {
+                    "annotations": [],
+                    "linkedService": {
+                      "name": "Lakehouse_Service",
+                      "properties": {
+                        "annotations": [],
+                        "type": "Lakehouse",
+                        "typeProperties": {
+                          "workspaceId": "<workspace-id>",
+                          "artifactId": "<lakehouse-id>",
+                          "rootFolder": "Files"
+                        }
+                      }
+                    },
+                    "type": "DelimitedText",
+                    "typeProperties": {
+                      "location": {
+                        "type": "LakehouseLocation",
+                        "folderPath": {
+                          "value": "@concat('Casestudy1/Archive/Processed/', formatDateTime(utcNow(),'yyyy/MM/dd'))",
+                          "type": "Expression"
+                        }
+                      },
+                      "columnDelimiter": ",",
+                      "escapeChar": "\\",
+                      "firstRowAsHeader": true,
+                      "quoteChar": "\""
+                    },
+                    "schema": []
+                  }
+                },
+                "enableStaging": false,
+                "translator": {
+                  "type": "TabularTranslator",
+                  "typeConversion": true,
+                  "typeConversionSettings": {
+                    "allowDataTruncation": true,
+                    "treatBooleanAsNumber": false
+                  }
                 }
               }
             },
-
             {
               "name": "Delete_From_Landing",
               "type": "Delete",
               "dependsOn": [
                 {
                   "activity": "Copy_to_Archive_Processed",
-                  "dependencyConditions": ["Succeeded"]
+                  "dependencyConditions": [
+                    "Succeeded"
+                  ]
                 }
-              ]
+              ],
+              "policy": {
+                "timeout": "0.12:00:00",
+                "retry": 3,
+                "retryIntervalInSeconds": 30,
+                "secureOutput": false,
+                "secureInput": false
+              },
+              "typeProperties": {
+                "datasetSettings": {
+                  "annotations": [],
+                  "linkedService": {
+                    "name": "Lakehouse_Service",
+                    "properties": {
+                      "annotations": [],
+                      "type": "Lakehouse",
+                      "typeProperties": {
+                        "workspaceId": "<workspace-id>",
+                        "artifactId": "<lakehouse-id>",
+                        "rootFolder": "Files"
+                      }
+                    }
+                  },
+                  "type": "Binary",
+                  "typeProperties": {
+                    "location": {
+                      "type": "LakehouseLocation",
+                      "folderPath": "Casestudy1/Landing/Incoming"
+                    }
+                  }
+                },
+                "logStorageSettings": {
+                  "path": "",
+                  "externalReferences": {
+                    "connection": "<logging-connection-id>"
+                  }
+                },
+                "enableLogging": true,
+                "storeSettings": {
+                  "type": "AzureBlobStorageReadSettings",
+                  "recursive": false,
+                  "wildcardFileName": {
+                    "value": "@item().name",
+                    "type": "Expression"
+                  },
+                  "enablePartitionDiscovery": false
+                }
+              }
             },
-
             {
               "name": "MicrosoftTeams_Notification",
               "type": "MicrosoftTeams",
               "dependsOn": [
                 {
                   "activity": "Delete_From_Landing",
-                  "dependencyConditions": ["Succeeded"]
+                  "dependencyConditions": [
+                    "Succeeded"
+                  ]
                 }
               ],
+              "policy": {
+                "timeout": "0.12:00:00",
+                "retry": 0,
+                "retryIntervalInSeconds": 30,
+                "secureOutput": false,
+                "secureInput": false
+              },
               "typeProperties": {
                 "operationType": "SendMessageInChannel",
-                "subject": "Fabric Pipeline Success",
-                "content": "Pipeline executed successfully",
+                "content": "<p>Pipeline: @{pipeline().PipelineName}</p>\n<p>Pipeline ID: @{pipeline().Pipeline}</p>\n<p>Run ID: @{pipeline().RunId}</p>\n<p>Execution Time (UTC): @{utcNow()}</p>\n<p>Status: Success</p>",
+                "subject": {
+                  "value": "Fabric Pipeline Success - @{pipeline().PipelineName}\n",
+                  "type": "Expression"
+                },
+                "teamId": "<team-id>",
+                "channelId": "<channel-id>"
+              },
+              "externalReferences": {
+                "connection": "<connection-id>"
+              }
+            },
+            {
+              "name": "Copy_SchemaDrift_To_Quarantine",
+              "type": "Copy",
+              "dependsOn": [
+                {
+                  "activity": "Validate_File_Schema",
+                  "dependencyConditions": [
+                    "Failed"
+                  ]
+                }
+              ],
+              "policy": {
+                "timeout": "0.12:00:00",
+                "retry": 2,
+                "retryIntervalInSeconds": 30,
+                "secureOutput": false,
+                "secureInput": false
+              },
+              "typeProperties": {
+                "source": {
+                  "type": "DelimitedTextSource",
+                  "storeSettings": {
+                    "type": "LakehouseReadSettings",
+                    "recursive": true,
+                    "wildcardFolderPath": "Casestudy1/Landing/Incoming",
+                    "wildcardFileName": {
+                      "value": "@item().name",
+                      "type": "Expression"
+                    },
+                    "enablePartitionDiscovery": false
+                  },
+                  "formatSettings": {
+                    "type": "DelimitedTextReadSettings"
+                  },
+                  "datasetSettings": {
+                    "annotations": [],
+                    "linkedService": {
+                      "name": "Lakehouse_Service",
+                      "properties": {
+                        "annotations": [],
+                        "type": "Lakehouse",
+                        "typeProperties": {
+                          "workspaceId": "<workspace-id>",
+                          "artifactId": "<lakehouse-id>",
+                          "rootFolder": "Files"
+                        }
+                      }
+                    },
+                    "type": "DelimitedText",
+                    "typeProperties": {
+                      "location": {
+                        "type": "LakehouseLocation"
+                      },
+                      "columnDelimiter": ",",
+                      "escapeChar": "\\",
+                      "firstRowAsHeader": true,
+                      "quoteChar": "\""
+                    },
+                    "schema": []
+                  }
+                },
+                "sink": {
+                  "type": "DelimitedTextSink",
+                  "storeSettings": {
+                    "type": "LakehouseWriteSettings"
+                  },
+                  "formatSettings": {
+                    "type": "DelimitedTextWriteSettings",
+                    "fileExtension": ".txt"
+                  },
+                  "datasetSettings": {
+                    "annotations": [],
+                    "linkedService": {
+                      "name": "Lakehouse_Service",
+                      "properties": {
+                        "annotations": [],
+                        "type": "Lakehouse",
+                        "typeProperties": {
+                          "workspaceId": "<workspace-id>",
+                          "artifactId": "<lakehouse-id>",
+                          "rootFolder": "Files"
+                        }
+                      }
+                    },
+                    "type": "DelimitedText",
+                    "typeProperties": {
+                      "location": {
+                        "type": "LakehouseLocation",
+                        "folderPath": "Casestudy1/Quarantine/Unexpected"
+                      },
+                      "columnDelimiter": ",",
+                      "escapeChar": "\\",
+                      "firstRowAsHeader": true,
+                      "quoteChar": "\""
+                    },
+                    "schema": []
+                  }
+                },
+                "enableStaging": false,
+                "translator": {
+                  "type": "TabularTranslator",
+                  "typeConversion": true,
+                  "typeConversionSettings": {
+                    "allowDataTruncation": true,
+                    "treatBooleanAsNumber": false
+                  }
+                }
+              }
+            },
+            {
+              "name": "Delete_SchemaDrift_From_Landing",
+              "type": "Delete",
+              "dependsOn": [
+                {
+                  "activity": "Copy_SchemaDrift_To_Quarantine",
+                  "dependencyConditions": [
+                    "Succeeded"
+                  ]
+                }
+              ],
+              "policy": {
+                "timeout": "0.12:00:00",
+                "retry": 3,
+                "retryIntervalInSeconds": 30,
+                "secureOutput": false,
+                "secureInput": false
+              },
+              "typeProperties": {
+                "datasetSettings": {
+                  "annotations": [],
+                  "linkedService": {
+                    "name": "Lakehouse_Service",
+                    "properties": {
+                      "annotations": [],
+                      "type": "Lakehouse",
+                      "typeProperties": {
+                        "workspaceId": "<workspace-id>",
+                        "artifactId": "<lakehouse-id>",
+                        "rootFolder": "Files"
+                      }
+                    }
+                  },
+                  "type": "Binary",
+                  "typeProperties": {
+                    "location": {
+                      "type": "LakehouseLocation",
+                      "folderPath": "Casestudy1/Landing/Incoming"
+                    }
+                  }
+                },
+                "logStorageSettings": {
+                  "path": "<logging-path>",
+                  "externalReferences": {
+                    "connection": "<logging-connection-id>"
+                  }
+                },
+                "enableLogging": true,
+                "storeSettings": {
+                  "type": "AzureBlobStorageReadSettings",
+                  "recursive": false,
+                  "wildcardFileName": {
+                    "value": "@item().name",
+                    "type": "Expression"
+                  },
+                  "enablePartitionDiscovery": false
+                }
+              }
+            },
+            {
+              "name": "MicrosoftTeams_Notification_SchemaDrift",
+              "type": "MicrosoftTeams",
+              "dependsOn": [
+                {
+                  "activity": "Delete_SchemaDrift_From_Landing",
+                  "dependencyConditions": [
+                    "Succeeded"
+                  ]
+                }
+              ],
+              "policy": {
+                "timeout": "0.12:00:00",
+                "retry": 0,
+                "retryIntervalInSeconds": 30,
+                "secureOutput": false,
+                "secureInput": false
+              },
+              "typeProperties": {
+                "operationType": "SendMessageInChannel",
+                "content": "<p>Pipeline: @{pipeline().PipelineName}</p>\n<p>Run ID: @{pipeline().RunId}</p>\n<p>Execution Time (UTC): @{utcNow()}</p>\n<p>Status: Schema-drift file quarantined</p>",
+                "subject": {
+                  "value": "Fabric Pipeline Exception - @{pipeline().PipelineName}\n",
+                  "type": "Expression"
+                },
+                "teamId": "<team-id>",
+                "channelId": "<channel-id>"
+              },
+              "externalReferences": {
+                "connection": "<connection-id>"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "ForEach_Unexpected_File",
+        "type": "ForEach",
+        "dependsOn": [
+          {
+            "activity": "Filter_Unexpected_Csv",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "typeProperties": {
+          "items": {
+            "value": "@activity('Filter_Unexpected_Csv').output.value",
+            "type": "Expression"
+          },
+          "activities": [
+            {
+              "name": "Copy_UnexpectedCsv_To_Quarantine",
+              "type": "Copy",
+              "dependsOn": [],
+              "policy": {
+                "timeout": "0.12:00:00",
+                "retry": 3,
+                "retryIntervalInSeconds": 30,
+                "secureOutput": false,
+                "secureInput": false
+              },
+              "typeProperties": {
+                "source": {
+                  "type": "DelimitedTextSource",
+                  "storeSettings": {
+                    "type": "AzureBlobStorageReadSettings",
+                    "recursive": true,
+                    "wildcardFolderPath": "Casestudy1/Landing/Incoming",
+                    "wildcardFileName": {
+                      "value": "@item().name",
+                      "type": "Expression"
+                    },
+                    "enablePartitionDiscovery": false
+                  },
+                  "formatSettings": {
+                    "type": "DelimitedTextReadSettings"
+                  },
+                  "datasetSettings": {
+                    "annotations": [],
+                    "linkedService": {
+                      "name": "Lakehouse_Service",
+                      "properties": {
+                        "annotations": [],
+                        "type": "Lakehouse",
+                        "typeProperties": {
+                          "workspaceId": "<workspace-id>",
+                          "artifactId": "<lakehouse-id>",
+                          "rootFolder": "Files"
+                        }
+                      }
+                    },
+                    "type": "DelimitedText",
+                    "typeProperties": {
+                      "location": {
+                        "type": "LakehouseLocation"
+                      },
+                      "columnDelimiter": ",",
+                      "escapeChar": "\\",
+                      "firstRowAsHeader": true,
+                      "quoteChar": "\""
+                    },
+                    "schema": []
+                  }
+                },
+                "sink": {
+                  "type": "DelimitedTextSink",
+                  "storeSettings": {
+                    "type": "AzureBlobStorageWriteSettings"
+                  },
+                  "formatSettings": {
+                    "type": "DelimitedTextWriteSettings",
+                    "fileExtension": ".txt"
+                  },
+                  "datasetSettings": {
+                    "annotations": [],
+                    "linkedService": {
+                      "name": "Lakehouse_Service",
+                      "properties": {
+                        "annotations": [],
+                        "type": "Lakehouse",
+                        "typeProperties": {
+                          "workspaceId": "<workspace-id>",
+                          "artifactId": "<lakehouse-id>",
+                          "rootFolder": "Files"
+                        }
+                      }
+                    },
+                    "type": "DelimitedText",
+                    "typeProperties": {
+                      "location": {
+                        "type": "LakehouseLocation",
+                        "folderPath": "Casestudy1/Quarantine/Unexpected"
+                      },
+                      "columnDelimiter": ",",
+                      "escapeChar": "\\",
+                      "firstRowAsHeader": true,
+                      "quoteChar": "\""
+                    },
+                    "schema": []
+                  }
+                },
+                "enableStaging": false,
+                "translator": {
+                  "type": "TabularTranslator",
+                  "typeConversion": true,
+                  "typeConversionSettings": {
+                    "allowDataTruncation": true,
+                    "treatBooleanAsNumber": false
+                  }
+                }
+              }
+            },
+            {
+              "name": "Delete_UnexpectedCsv_From_Landing",
+              "type": "Delete",
+              "dependsOn": [
+                {
+                  "activity": "Copy_UnexpectedCsv_To_Quarantine",
+                  "dependencyConditions": [
+                    "Succeeded"
+                  ]
+                }
+              ],
+              "policy": {
+                "timeout": "0.12:00:00",
+                "retry": 0,
+                "retryIntervalInSeconds": 30,
+                "secureOutput": false,
+                "secureInput": false
+              },
+              "typeProperties": {
+                "datasetSettings": {
+                  "annotations": [],
+                  "linkedService": {
+                    "name": "Lakehouse_Service",
+                    "properties": {
+                      "annotations": [],
+                      "type": "Lakehouse",
+                      "typeProperties": {
+                        "workspaceId": "<workspace-id>",
+                        "artifactId": "<lakehouse-id>",
+                        "rootFolder": "Files"
+                      }
+                    }
+                  },
+                  "type": "Binary",
+                  "typeProperties": {
+                    "location": {
+                      "type": "LakehouseLocation",
+                      "folderPath": "Casestudy1/Landing/Incoming"
+                    }
+                  }
+                },
+                "logStorageSettings": {
+                  "path": "",
+                  "externalReferences": {
+                    "connection": "<logging-connection-id>"
+                  }
+                },
+                "enableLogging": true,
+                "storeSettings": {
+                  "type": "AzureBlobStorageReadSettings",
+                  "recursive": false,
+                  "wildcardFileName": {
+                    "value": "@item().name",
+                    "type": "Expression"
+                  },
+                  "enablePartitionDiscovery": false
+                }
+              }
+            },
+            {
+              "name": "MicrosoftTeams_Notification_UnexpectedCsv",
+              "type": "MicrosoftTeams",
+              "dependsOn": [
+                {
+                  "activity": "Delete_UnexpectedCsv_From_Landing",
+                  "dependencyConditions": [
+                    "Succeeded"
+                  ]
+                }
+              ],
+              "policy": {
+                "timeout": "0.12:00:00",
+                "retry": 0,
+                "retryIntervalInSeconds": 30,
+                "secureOutput": false,
+                "secureInput": false
+              },
+              "typeProperties": {
+                "operationType": "SendMessageInChannel",
+                "content": "<p>Pipeline: @{pipeline().PipelineName}</p>\n<p>Run ID: @{pipeline().RunId}</p>\n<p>Execution Time (UTC): @{utcNow()}</p>\n<p>Status: Unexpected CSV quarantined</p>",
+                "subject": "Casestudy_1_Pipeline_Alerts",
+                "teamId": "<team-id>",
+                "channelId": "<channel-id>"
+              },
+              "externalReferences": {
+                "connection": "<connection-id>"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "ForEach_NonCsv",
+        "type": "ForEach",
+        "dependsOn": [
+          {
+            "activity": "Filter_NonCsv",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "typeProperties": {
+          "items": {
+            "value": "@activity('Filter_NonCsv').output.value",
+            "type": "Expression"
+          },
+          "activities": [
+            {
+              "name": "Copy_NonCsv_To_Quarantine",
+              "type": "Copy",
+              "dependsOn": [],
+              "policy": {
+                "timeout": "0.12:00:00",
+                "retry": 3,
+                "retryIntervalInSeconds": 30,
+                "secureOutput": false,
+                "secureInput": false
+              },
+              "typeProperties": {
+                "source": {
+                  "type": "DelimitedTextSource",
+                  "storeSettings": {
+                    "type": "AzureBlobStorageReadSettings",
+                    "recursive": true,
+                    "wildcardFolderPath": "Casestudy1/Landing/Incoming",
+                    "wildcardFileName": {
+                      "value": "@item().name",
+                      "type": "Expression"
+                    },
+                    "enablePartitionDiscovery": false
+                  },
+                  "formatSettings": {
+                    "type": "DelimitedTextReadSettings"
+                  },
+                  "datasetSettings": {
+                    "annotations": [],
+                    "linkedService": {
+                      "name": "Lakehouse_Service",
+                      "properties": {
+                        "annotations": [],
+                        "type": "Lakehouse",
+                        "typeProperties": {
+                          "workspaceId": "<workspace-id>",
+                          "artifactId": "<lakehouse-id>",
+                          "rootFolder": "Files"
+                        }
+                      }
+                    },
+                    "type": "DelimitedText",
+                    "typeProperties": {
+                      "location": {
+                        "type": "LakehouseLocation"
+                      },
+                      "columnDelimiter": ",",
+                      "escapeChar": "\\",
+                      "firstRowAsHeader": true,
+                      "quoteChar": "\""
+                    },
+                    "schema": []
+                  }
+                },
+                "sink": {
+                  "type": "DelimitedTextSink",
+                  "storeSettings": {
+                    "type": "AzureBlobStorageWriteSettings"
+                  },
+                  "formatSettings": {
+                    "type": "DelimitedTextWriteSettings",
+                    "fileExtension": ".txt"
+                  },
+                  "datasetSettings": {
+                    "annotations": [],
+                    "linkedService": {
+                      "name": "Lakehouse_Service",
+                      "properties": {
+                        "annotations": [],
+                        "type": "Lakehouse",
+                        "typeProperties": {
+                          "workspaceId": "<workspace-id>",
+                          "artifactId": "<lakehouse-id>",
+                          "rootFolder": "Files"
+                        }
+                      }
+                    },
+                    "type": "DelimitedText",
+                    "typeProperties": {
+                      "location": {
+                        "type": "LakehouseLocation",
+                        "folderPath": "Casestudy1/Quarantine/NonCsv"
+                      },
+                      "columnDelimiter": ",",
+                      "escapeChar": "\\",
+                      "firstRowAsHeader": true,
+                      "quoteChar": "\""
+                    },
+                    "schema": []
+                  }
+                },
+                "enableStaging": false,
+                "translator": {
+                  "type": "TabularTranslator",
+                  "typeConversion": true,
+                  "typeConversionSettings": {
+                    "allowDataTruncation": true,
+                    "treatBooleanAsNumber": false
+                  }
+                }
+              }
+            },
+            {
+              "name": "Delete_NonCsv_From_Landing",
+              "type": "Delete",
+              "dependsOn": [
+                {
+                  "activity": "Copy_NonCsv_To_Quarantine",
+                  "dependencyConditions": [
+                    "Succeeded"
+                  ]
+                }
+              ],
+              "policy": {
+                "timeout": "0.12:00:00",
+                "retry": 0,
+                "retryIntervalInSeconds": 30,
+                "secureOutput": false,
+                "secureInput": false
+              },
+              "typeProperties": {
+                "datasetSettings": {
+                  "annotations": [],
+                  "linkedService": {
+                    "name": "Lakehouse_Service",
+                    "properties": {
+                      "annotations": [],
+                      "type": "Lakehouse",
+                      "typeProperties": {
+                        "workspaceId": "<workspace-id>",
+                        "artifactId": "<lakehouse-id>",
+                        "rootFolder": "Files"
+                      }
+                    }
+                  },
+                  "type": "Binary",
+                  "typeProperties": {
+                    "location": {
+                      "type": "LakehouseLocation",
+                      "folderPath": "Casestudy1/Landing/Incoming"
+                    }
+                  }
+                },
+                "logStorageSettings": {
+                  "path": "<logging-path>",
+                  "externalReferences": {
+                    "connection": "<logging-connection-id>"
+                  }
+                },
+                "enableLogging": true,
+                "storeSettings": {
+                  "type": "AzureBlobStorageReadSettings",
+                  "recursive": false,
+                  "wildcardFileName": {
+                    "value": "@item().name",
+                    "type": "Expression"
+                  },
+                  "enablePartitionDiscovery": false
+                }
+              }
+            },
+            {
+              "name": "MicrosoftTeams_Notification_NonCsv",
+              "type": "MicrosoftTeams",
+              "dependsOn": [
+                {
+                  "activity": "Delete_NonCsv_From_Landing",
+                  "dependencyConditions": [
+                    "Succeeded"
+                  ]
+                }
+              ],
+              "policy": {
+                "timeout": "0.12:00:00",
+                "retry": 0,
+                "retryIntervalInSeconds": 30,
+                "secureOutput": false,
+                "secureInput": false
+              },
+              "typeProperties": {
+                "operationType": "SendMessageInChannel",
+                "content": "<p>Pipeline: @{pipeline().PipelineName}</p>\n<p>Run ID: @{pipeline().RunId}</p>\n<p>Execution Time (UTC): @{utcNow()}</p>\n<p>Status: Non-CSV file quarantined</p>",
+                "subject": "Casestudy_1_Pipeline_Alerts",
                 "teamId": "<team-id>",
                 "channelId": "<channel-id>"
               },
@@ -144,6 +1236,7 @@
         }
       }
     ],
-    "lastModifiedByObjectId": "<user-id>"
+    "lastModifiedByObjectId": "<user-id>",
+    "lastPublishTime": "2026-04-12T06:25:39Z"
   }
 }
